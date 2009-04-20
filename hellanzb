@@ -1,0 +1,118 @@
+#!/bin/sh
+#
+#/etc/rc.d/init.d/hellanzb
+# chkconfig: 235 80 30
+# description: Run hellanzb as a Daemon service using screen
+# processname: hellanzb
+# Source function library.
+. /etc/rc.d/init.d/functions
+# Source networking configuration.
+. /etc/sysconfig/network
+#VARIABLES#
+. /etc/hellanzb.init.conf
+PATH=/usr/bin:/usr/local/bin:/usr/local/sbin:/sbin:/bin:/usr/sbin
+DESC="hellanzb daemon"
+NAME=hellanzb.py
+DAEMON=$NAME
+SCRIPTNAME=/etc/init.d/$NAME
+RETVAL=0
+lockfile=${LOCKFILE-/var/lock/subsys/hellanzb}
+
+# Check that networking is up.
+[ ${NETWORKING} = "no" ] && exit 0
+
+#Functions
+checkconfig() {
+	exists=0
+
+	for i in `echo "$PATH" | tr ':' '\n'` ; do
+		if [ -f $i/$NAME ] ; then
+			exists=1
+			appdir=$i
+			apppath=$i/$NAME
+			break
+		fi
+	done
+
+	if ! [ -x "$apppath" ] ; then
+		echo "cannot find executable hellanzb binary in PATH $appdir" | tee -a "$logfile" >&2
+		exit 3
+	fi
+	
+	if [ $exists -eq 0 ] ; then
+			echo "cannot find hellanzb binary in PATH $PATH" | tee -a "$logfile" >&2
+			exit 3
+	fi
+
+	if ! [ -r "${config}" ] ; then 
+		echo "cannot find readable config ${config}. check that it is there and permissions are appropriate" | tee -a "$logfile" >&2
+		exit 3 
+	fi 
+
+	dlpath=`getsession "$config"` 
+	if ! [ -d "${dlpath}" ] ; then
+		echo "cannot find the download directory ${session} from config ${config}. check permissions" | tee -a "$logfile" >&2
+		exit 3
+	fi
+}
+
+getsession() { 
+
+	path=`awk '/^Hellanzb.PREFIX_DIR[[:space:]]*=[[:space:]]*/ { print $3 }' "$config"`
+	trimpath=`echo $path | sed -e s/\'//g`
+	echo $trimpath
+}
+
+start() {
+
+  [ -d "${base}" ] && cd "${base}"
+
+  daemon `su -c "/usr/bin/hellanzb.py -D 2>&1 1>/dev/null" ${user} | tee -a "$logfile" >&2`
+
+  RETVAL=$?
+  echo
+  [ $RETVAL -eq 0 ] && touch ${lockfile}
+
+}
+
+stop() {
+	
+	killproc $NAME
+	
+	RETVAL=$?
+	echo
+	[ $RETVAL -eq 0 ] && rm -f ${lockfile}
+
+}
+#End Functions
+#Script
+
+checkconfig
+
+case "$1" in
+
+  start)
+	echo -n "Starting $DESC: $NAME"
+	start
+	;;
+
+  stop)
+	echo -n "Stopping $DESC: $NAME"
+	stop
+	;;
+
+  restart|force-reload)
+	echo -n "Restarting $DESC: $NAME"
+	stop
+	sleep 1
+	start
+	;;
+
+  *)
+	echo "Usage: $SCRIPTNAME {start|stop|restart|force-reload}" >&2
+	exit 1
+	;;
+
+esac
+
+exit 0

@@ -1,0 +1,127 @@
+#!/bin/sh
+#
+#/etc/rc.d/init.d/rtorrent
+# chkconfig: 235 80 30
+# description: Run rtorrent as a Daemon service using screen
+# processname: rtorrent
+# Source function library.
+. /etc/rc.d/init.d/functions
+# Source networking configuration.
+. /etc/sysconfig/network
+#VARIABLES#
+. /etc/rtorrent.init.conf
+PATH=/usr/bin:/usr/local/bin:/usr/local/sbin:/sbin:/bin:/usr/sbin
+DESC="rtorrent via screen"
+NAME=rtorrent
+DAEMON=$NAME
+SCRIPTNAME=/etc/init.d/$NAME
+RETVAL=0
+lockfile=${LOCKFILE-/var/lock/subsys/rtorrent}
+
+# Check that networking is up.
+[ ${NETWORKING} = "no" ] && exit 0
+
+#Functions
+checkconfig() {
+	exists=0
+
+	for i in `echo "$PATH" | tr ':' '\n'` ; do
+		if [ -f $i/$NAME ] ; then
+			exists=1
+			appdir=$i
+			apppath=$i/$NAME
+			break
+		fi
+	done
+
+	if ! [ -x "$apppath" ] ; then
+		echo "cannot find executable rtorrent binary in PATH $appdir" | tee -a "$logfile" >&2
+		exit 3
+	fi
+	
+	if [ $exists -eq 0 ] ; then
+			echo "cannot find rtorrent binary in PATH $PATH" | tee -a "$logfile" >&2
+			exit 3
+	fi
+
+	if ! [ -r "${config}" ] ; then 
+		echo "cannot find readable config ${config}. check that it is there and permissions are appropriate" | tee -a "$logfile" >&2
+		exit 3 
+	fi 
+
+	session=`getsession "$config"` 
+	if ! [ -d "${session}" ] ; then
+		echo "cannot find readable session directory ${session} from config ${config}. check permissions" | tee -a "$logfile" >&2
+		exit 3
+	fi
+}
+
+getsession() { 
+
+	session=`awk '/^[[:space:]]*session[[:space:]]*=[[:space:]]*/{print($3)}' "$config"`
+	echo $session
+}
+
+start() {
+
+  [ -d "${base}" ] && cd "${base}"
+
+#Specific to rtorrent. Screen & stty do not play well together - http://libtorrent.rakshasa.no/wiki/RTorrentUserGuide
+  stty stop undef && stty start undef
+  
+  # su -c "screen -ls | grep -sq "\.${srnname}[[:space:]]" " ${user} || su -c "screen -dm -S ${srnname} 2>&1 1>/dev/null" ${user} | tee -a "$logfile" >&2
+  
+  # this works for the screen command, but starting rtorrent below adopts screen session gid
+  # even if it is not the screen session we started (e.g. running under an undesirable gid
+  #su -c "screen -ls | grep -sq "\.${srnname}[[:space:]]" " ${user} || su -c "sg \"$group\" -c \"screen -fn -dm -S ${srnname} 2>&1 1>/dev/null\"" ${user} | tee -a "$logfile" >&2
+
+  daemon `su -c "screen -dmS "${srnname}" rtorrent ${options} 2>&1 1>/dev/null" ${user} | tee -a "$logfile" >&2`
+
+  RETVAL=$?
+  echo
+  [ $RETVAL -eq 0 ] && touch ${lockfile}
+
+}
+
+stop() {
+	
+	killproc $NAME
+	
+	RETVAL=$?
+	echo
+	[ $RETVAL -eq 0 ] && rm -f ${lockfile}
+
+}
+#End Functions
+#Script
+
+checkconfig
+
+case "$1" in
+
+  start)
+	echo -n "Starting $DESC: $NAME"
+	start
+	;;
+
+  stop)
+	echo -n "Stopping $DESC: $NAME"
+	stop
+	;;
+
+  restart|force-reload)
+	echo -n "Restarting $DESC: $NAME"
+	stop
+	sleep 1
+	start
+	;;
+
+  *)
+	echo "Usage: $SCRIPTNAME {start|stop|restart|force-reload}" >&2
+	exit 1
+	;;
+
+esac
+
+exit 0
+
