@@ -1,8 +1,18 @@
 #!/bin/sh
 #
+#
+#############
+###<Notes>###
+#############
+# This script depends on dtach.
+# Based on the script created by lostnihilist at http://libtorrent.rakshasa.no/attachment/wiki/RTorrentCommonTasks/rtorrentInit.sh
+# Licensed under the GPLv2 by average_geek: contact_at_theaveragegeek_dot_com
+##############
+###</Notes>###
+##############
 #/etc/rc.d/init.d/rtorrent
 # chkconfig: 235 80 30
-# description: Run rtorrent as a Daemon service using screen
+# description: Run rtorrent as a Daemon service using dtach
 # processname: rtorrent
 # Source function library.
 . /etc/rc.d/init.d/functions
@@ -11,7 +21,7 @@
 #VARIABLES#
 . /etc/rtorrent.init.conf
 PATH=/usr/bin:/usr/local/bin:/usr/local/sbin:/sbin:/bin:/usr/sbin
-DESC="rtorrent via screen"
+DESC="rtorrent via dtach"
 NAME=rtorrent
 DAEMON=$NAME
 SCRIPTNAME=/etc/init.d/$NAME
@@ -64,18 +74,7 @@ getsession() {
 
 start() {
 
-  [ -d "${base}" ] && cd "${base}"
-
-#Specific to rtorrent. Screen & stty do not play well together - http://libtorrent.rakshasa.no/wiki/RTorrentUserGuide
-  stty stop undef && stty start undef
-  
-  # su -c "screen -ls | grep -sq "\.${srnname}[[:space:]]" " ${user} || su -c "screen -dm -S ${srnname} 2>&1 1>/dev/null" ${user} | tee -a "$logfile" >&2
-  
-  # this works for the screen command, but starting rtorrent below adopts screen session gid
-  # even if it is not the screen session we started (e.g. running under an undesirable gid
-  #su -c "screen -ls | grep -sq "\.${srnname}[[:space:]]" " ${user} || su -c "sg \"$group\" -c \"screen -fn -dm -S ${srnname} 2>&1 1>/dev/null\"" ${user} | tee -a "$logfile" >&2
-
-  daemon `su -c "screen -dmS "${srnname}" rtorrent ${options} 2>&1 1>/dev/null" ${user} | tee -a "$logfile" >&2`
+  daemon `su -c "dtach -n /tmp/dtach-"${DAEMON}" rtorrent ${options} 2>&1 1>/dev/null" ${user} | tee -a "$logfile" >&2`
 
   RETVAL=$?
   echo
@@ -124,4 +123,5 @@ case "$1" in
 esac
 
 exit 0
+
 
