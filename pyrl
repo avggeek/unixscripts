@@ -1,0 +1,163 @@
+#!/bin/sh
+#
+#/etc/rc.d/init.d/pyrl
+# chkconfig: 235 81 21
+# description: Run pyrl as a Daemon service using dtach
+# processname: pyrl
+# Source function library.
+. /etc/rc.d/init.d/functions
+# Source networking configuration.
+. /etc/sysconfig/network
+#VARIABLES#
+. /etc/pyrl.init.conf
+DESC="pyrl daemon via dtach"
+NAME=pyrl.py
+DAEMON=pyrl
+SCRIPTNAME=/etc/init.d/$DAEMON
+RETVAL=0
+lockfile=${LOCKFILE-/var/lock/subsys/pyrl}
+pidfile=${PIDFILE-/var/run/pyrl.pid}
+#Because we are nice, we will check for existence of scheduler.py as well (http://code.google.com/p/scheduler-py/)
+SCHEDULER=scheduler.py
+
+# Check that networking is up.
+[ ${NETWORKING} = "no" ] && exit 0
+
+#Functions
+checkconfig() {
+	appexists=0
+	schedexists=0
+
+	#Because if a user can get a path wrong, he will
+	if ! [ -d "$pyrlpath" ] ; then
+		echo "The pyrl application path ${pyrlpath} is not a directory. Please check the config file ${config}" | tee -a "$logfile" >&2
+		exit 3
+	fi
+	
+	
+	for i in `echo "$pyrlpath" | tr ':' '\n'` ; do
+		if [ -f $i/$NAME ] ; then
+			appexists=1
+			appdir=$i
+			apppath=$i/$NAME
+		fi
+		if [ -f $i/$SCHEDULER ] ; then
+			schedexists=1
+			appdir=$i
+			schedpath=$i/$SCHEDULER
+			break
+		fi
+	done
+
+	if [ $appexists -eq 0 ] ; then
+		echo "cannot find the pyrl script in PATH $pyrlpath" | tee -a "$logfile" >&2
+		exit 3
+	fi
+	
+	if [ $schedexists -eq 0 ] ; then
+		echo "cannot find the scheduler script in PATH $pyrlpath. Please copy the script into the pyrl folder" | tee -a "$logfile" >&2
+		exit 3
+	fi
+
+	if ! [ -x "$apppath" ] ; then
+			echo "cannot find executable pyrl script in PATH $appdir" | tee -a "$logfile" >&2
+			exit 3
+	fi
+	
+	if ! [ -r "${pyrlpath}/config.py" ] ; then 
+		echo "cannot find readable config.py at ${pyrlpath}. check that it is there and permissions are appropriate" | tee -a "$logfile" >&2
+		exit 3 
+	fi 
+
+}
+
+makepidfile() {
+	#worst abuse of awk.. ever
+	pid=`ps ax | egrep dtach\(.*\)pyrl | awk '!/egrep/' | awk '{print($1)}'`
+	if [ -z $pid ] ; then
+		echo "Couldn't find a PID for pyrl. Maybe the script really didn't start? Trying executing pyrl.py from the prompt"
+		exit 3
+	else
+		echo $pid > $pidfile
+	fi
+
+}
+
+start() {
+
+  #Again being nice, we create the lasttweet.db and lastdm.db files
+  if [ -e "$pyrlpath/lasttweet.db" ]; then
+  	break
+  else
+  	cd "${pyrlpath}"
+  	echo "Creating the lasttweet.db file. This will happen only once"
+  	#we do this via su because init.d scripts run in root and we need this file to be readable to the user running pyrl
+  	su -c "echo 0 > lasttweet.db" ${user}
+  fi
+  
+  if [ -e "$pyrlpath/lastdm.db" ]; then
+    	break
+    else
+    	cd "${pyrlpath}"
+    	echo "Creating the lastdm.db file. This will happen only once"
+    	#we do this via su because init.d scripts run in root and we need this file to be readable to the user running pyrl
+    	su -c "echo 1 > lastdm.db" ${user}
+  fi
+  
+  cd "${pyrlpath}"
+
+  daemon `su -c "dtach -n /tmp/dtach-${DAEMON} -r none python pyrl.py 2>&1 1>/dev/null" ${user} | tee -a "$logfile" >&2`
+ 
+  RETVAL=$?
+  echo
+  [ $RETVAL -eq 0 ] && touch ${lockfile} && makepidfile
+
+}
+
+stop() {
+	
+	pid=`less "$pidfile" | awk '{print($1)}' | sed "s/[^0-9]//g"`
+
+	#Be nice, let dtach clean up after itself.
+	#No SIG for signal name since this is POSIX bash
+	daemon `kill -s TERM "$pid"`
+	
+	RETVAL=$?
+	echo
+	[ $RETVAL -eq 0 ] && rm -f ${lockfile} && rm -f ${pidfile}
+
+}
+#End Functions
+#Script
+
+checkconfig
+
+case "$1" in
+
+  start)
+	echo -n "Starting $DESC: $NAME"
+	start
+	;;
+
+  stop)
+	echo -n "Stopping $DESC: $NAME"
+	stop
+	;;
+
+  restart|force-reload)
+	echo -n "Restarting $DESC: $NAME"
+	stop
+	sleep 1
+	start
+	;;
+
+  *)
+	echo "Usage: $SCRIPTNAME {start|stop|restart|force-reload}" >&2
+	exit 1
+	;;
+
+esac
+
+exit 0
+
+
