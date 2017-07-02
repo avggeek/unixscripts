@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Script to backup PostgreSQL databases as well as Atlassian application data folders to Amazon S3.
-# Mostly taken from /usr/share/doc/s3ql/examples/s3ql_backup.sh, https://wiki.postgresql.org/wiki/Automated_Backup_on_Linux 
+# Mostly taken from /usr/share/doc/s3ql/examples/s3ql_backup.sh, https://wiki.postgresql.org/wiki/Automated_Backup_on_Linux
 # and https://gist.github.com/cm6051/a7a67c30b2ef3f52f8c5. Shout-out to the many SO commenters who provided working
 # Bash examples for me to learn from.
 
@@ -35,7 +35,6 @@ BORGBACKUPS_TO_KEEP="--keep-daily=30 --keep-weekly=4 --keep-monthly=-1"
 # main {
 # check_dependencies
 # check_dirs
-# ALLBACKUP_START
 # dump_database (Verbose & non-verbose mode)
 # mount_s3 (incl. fsck, verbose & non-verbose)
 # borg_backup (incl. create archive, verbose & non-verbose)
@@ -53,6 +52,13 @@ BORGBACKUPS_TO_KEEP="--keep-daily=30 --keep-weekly=4 --keep-monthly=-1"
 #foo() {
 #}
 
+main () {
+      check_dependencies
+      check_dirs
+      ALLBACKUP_START="$(date +%s)"
+      dump_database
+      ALLBACKUP_END="$(date +%s)"
+}
 
 ##
 ## Simple logging mechanism for Bash
@@ -73,17 +79,6 @@ wrn_lvl=3
 dbg_lvl=4
 inf_lvl=5
 
-while getopts "hqvl:" opt; do
-    case "$opt" in
-       h) usage; exit 0 ;;
-       q) verbosity=$(( verbosity-1 )) ;;
-       v) verbosity=$(( verbosity+1 )) ;;
-       l) exec 3> "$OPTARG" ;;
-       *) error "Invalid options: $1"; usage; exit 1 ;;
-    esac
-done
-shift $((OPTIND-1))
-
 notify() { log $silent_lvl "NOTE: $1"; } # Always prints
 critical() { log $crt_lvl "CRITICAL: $2"; }
 error() { log $err_lvl "ERROR: $1"; }
@@ -97,6 +92,28 @@ log() {
         echo -e "$datestring $2" | fold -w70 -s | sed '2~1s/^/  /' >&3
     fi
 }
+
+usage() {
+    echo "Usage:"
+    echo "  $0 [OPTIONS]"
+    echo "Options:"
+    echo "  -h      : display this help message"
+    echo "  -q      : decrease verbosity level (can be repeated: -qq, -qqq)"
+    echo "  -v      : increase verbosity level (can be repeated: -vv, -vvv)"
+    echo "  -l FILE : redirect logging to FILE instead of STDERR"
+}
+
+while getopts "hqvl:" opt; do
+    case "$opt" in
+       h) usage; exit 0 ;;
+       q) (( verbosity = verbosity - 1 )) ;;
+       v) (( verbosity = verbosity + 1 )) ;;
+       l) exec 3>>$OPTARG ;;
+       *) error "Invalid options: $1"; usage; exit 1 ;;
+    esac
+done
+shift $((OPTIND-1))
+args="$@"
 
 # EXAMPLE: notify "This logging system uses the standard verbosity level mechanism to choose which messages to print. Command line arguments customize this value, as well as where logging messages should be directed (from the default of STDERR). Long messages will be split at spaces to wrap at a character limit, and wrapped lines are indented. Wrapping and indenting can be modified in the code."
 # CRITICAL ERROR example: critical "" "Abort"
@@ -112,77 +129,111 @@ calc_elapsed_time () {
   elapsedtime=$(printf "%02d:%02d:%02d" $h $m $s)
 }
 
-# Find Home Directory. All required auth files are relative to this directory.
-USER_HOME="$(getent passwd "$USER" | cut -d: -f6)"
+check_dependencies () {
+  # Find Home Directory. All required auth files are relative to this directory.
+  USER_HOME="$(getent passwd "$USER" | cut -d: -f6)"
+  # Check if required files exist
+  if [[ ! -f "$USER_HOME/.pgpass" ]]; then { critical "" "PostgreSQL configuration file is not available in default location of $USER_HOME/.pgpass. Aborting."; exit 1; } else :; fi
+  # TODO: Add check for S3QL/authinfo2
 
-# Check if required executables exist in user's $PATH
-hash pg_dumpall 2>/dev/null || { critical "" "Script requires pg_dumpall but it is not available in $USER's PATH. Aborting."; exit 1; }
-hash borg 2>/dev/null || { critical "" "Script requires borg but it is not available in $USER's PATH. Aborting."; exit 1; }
-#hash mount.s3ql 2>/dev/null || { critical "" "Script requires S3QL tools but they are not available in $USER's PATH. Aborting."; exit 1; }
-hash rsync 2>/dev/null || { critical "" "Script requires rsync but it is not available in $USER's PATH. Aborting."; exit 1; }
+  # Check if required executables exist in user's $PATH
+  hash pg_dumpall 2>/dev/null || { critical "" "Script requires pg_dumpall but it is not available in $USER's PATH. Aborting."; exit 1; }
+  hash borg 2>/dev/null || { critical "" "Script requires borg but it is not available in $USER's PATH. Aborting."; exit 1; }
+  #hash mount.s3ql 2>/dev/null || { critical "" "Script requires S3QL tools but they are not available in $USER's PATH. Aborting."; exit 1; }
+  hash rsync 2>/dev/null || { critical "" "Script requires rsync but it is not available in $USER's PATH. Aborting."; exit 1; }
+}
 
-# Check if required files exist
-if [[ ! -f "$USER_HOME/.pgpass" ]]; then { critical "" "PostgreSQL configuration file is not available in default location of $USER_HOME/.pgpass. Aborting."; exit 1; } else :; fi
-# Check if target directories for Borg backup exist
-for dir in $BORGBACKUP_SRC; do if [[ ! -d "$dir" ]]; then { critical "" "Target directory(ies) for Borg backup $dir is(are) missing" ; exit 1; } fi; done
+check_dirs () {
+  # Check if target directories for Borg backup exist
+  for dir in $BORGBACKUP_SRC; do if [[ ! -d "$dir" ]]; then { critical "" "Target directory(ies) for Borg backup $dir is(are) missing" ; exit 1; } fi; done
+  # Before attempting to create Backup directories, check if parent directories are writeable
+  PGBACKUP_PARENT=$(dirname "${PGBACKUP_DIR}")
+  if [[ ! -w "$PGBACKUP_PARENT" ]]; then warning "Directory where PostgreSQL backups are to be stored are not writeable by $USER. Unless $PGBACKUP_DIR already exists and is writeable, the script will fail trying to create the directory/backup files"; else :; fi
+  BORGBACKUP_PARENT=$(dirname "${BORGBACKUP_DIR}")
+  if [[ ! -w "$BORGBACKUP_PARENT" ]]; then warning "Directory where Borg backup files are to be stored are not writeable by $USER. Unless $BORGBACKUP_DIR already exists and is writeable, the script will fail trying to create the directory/backup files"; else :; fi
 
-# Before attempting to create Backup directories, check if parent directories are writeable
-PGBACKUP_PARENT=$(dirname "${PGBACKUP_DIR}")
-if [[ ! -w "$PGBACKUP_PARENT" ]]; then warning "Directory where PostgreSQL backups are to be stored are not writeable by $USER. Unless $PGBACKUP_DIR already exists and is writeable, the script will fail trying to create the directory/backup files"; else :; fi
-BORGBACKUP_PARENT=$(dirname "${BORGBACKUP_DIR}")
-if [[ ! -w "$BORGBACKUP_PARENT" ]]; then warning "Directory where Borg backup files are to be stored are not writeable by $USER. Unless $BORGBACKUP_DIR already exists and is writeable, the script will fail trying to create the directory/backup files"; else :; fi
+  # Create backup directories
+  if [[ ! -d "$PGBACKUP_DIR" ]]; then { notify "Creating PostgreSQL Backup directory as it does not exist" ; mkdir -p "$PGBACKUP_DIR"; }; fi;
+  if [[ ! -d "$BORGBACKUP_DIR" ]]; then { notify "Creating Borg backup directory as it does not exist" ; mkdir -p "$BORGBACKUP_DIR"; }; fi;
+}
 
-# Create backup directories
-if [[ ! -d "$PGBACKUP_DIR" ]]; then { inf "Creating PostgreSQL Backup directory as it does not exist" ; mkdir -p "$PGBACKUP_DIR"; }; fi;
-if [[ ! -d "$BORGBACKUP_DIR" ]]; then { inf "Creating Borg backup directory as it does not exist" ; mkdir -p "$BORGBACKUP_DIR"; }; fi;
+dump_database () {
+  # Start by backing up PostgreSQL databases
+  # Check for variables else set them
+  if [[ -z ${PGHOST:-} ]]; then PGHOSTNAME="localhost"; else PGHOSTNAME="$PGHOST":; fi;
+  if [[ -z ${PGPORT:-} ]]; then PGHOSTPORT="5432"; else PGHOSTPORT="$PGPORT":; fi;
+  debug "About to connect to PostgreSQL instance running at $PGHOSTNAME:$PGHOSTPORT"
 
-ALLBACKUP_START="$(date +%s)"
+  # If verbosity is set to debug or higher then all programs called by the backup script will run in verbose mode.
+  if [[ $verbosity -gt "$wrn_lvl" ]]; then #i.e. -vv
+    #Dump all PostgreSQL databases
+    PGBACKUP_START="$(date +%s)"
+    PGBACKUP_LOG="$( { pg_dumpall --host="$PGHOSTNAME" --port="$PGHOSTPORT" \
+                    --verbose --clean -w > $PGBACKUP_DIR/atldbbackup.sql.inprogress; } 2>&1 1>&3)"
+    PGBACKUP_STATUS=$?
+    PGBACKUP_DONE="$(($(date +%s)-PGBACKUP_START))"
+    calc_elapsed_time "$PGBACKUP_DONE"
+      if [[ $PGBACKUP_STATUS -eq 0 ]]; then
+        notify "PostgreSQL Database dump creation has completed successfully. Time taken was $elapsedtime. Verbose log output from PostgreSQL dump follows"
+        echo -e "$PGBACKUP_LOG" | fold -w70 -s | sed '2~1s/^/  /' >&3
+      else
+        critical "" "PostgreSQL Database dump has failed. Time taken was $elapsedtime. Verbose log output from PostgreSQL dump follows"
+        echo -e "$PGBACKUP_LOG" | fold -w70 -s | sed '2~1s/^/  /' >&3
+      fi
 
-# Start by backing up PostgreSQL databases
-# Check for variables else set them
-if [[ -z ${PGHOST:-} ]]; then PGHOSTNAME="localhost"; else PGHOSTNAME="$PGHOST":; fi;
-if [[ -z ${PGPORT:-} ]]; then PGHOSTPORT="5432"; else PGHOSTPORT="$PGPORT":; fi;
-debug "About to connect to PostgreSQL instance running at $PGHOSTNAME:$PGHOSTPORT"
-
-# If verbosity is set to debug or higher then all parts of the core backup script will run in verbose mode.
-if [[ $verbosity -gt "$wrn_lvl" ]]; then #i.e. -vv
-  #Dump all PostgreSQL databases
-  PGBACKUP_START="$(date +%s)"
-  PGBACKUP_LOG="$( { pg_dumpall --host="$PGHOSTNAME" --port="$PGHOSTPORT" \
-                  --verbose --clean -w > $PGBACKUP_DIR/atldbbackup.sql.inprogress; } 2>&1)"
-  PGBACKUP_STATUS=$?
-
-  PGBACKUP_DONE="$(($(date +%s)-PGBACKUP_START))"
-  calc_elapsed_time "$PGBACKUP_DONE"
-  if [[ $PGBACKUP_STATUS -eq 0 ]]; then
-    notify "PostgreSQL Backup file creation has completed successfully. Time taken was $elapsedtime. Verbose log output from PostgreSQL dump follows"
-    echo -e "$PGBACKUP_LOG" | fold -w70 -s | sed '2~1s/^/  /' >&3
-  else
-    critical "" "PostgreSQL Database dump has failed. Time taken was $elapsedtime. Verbose log output from PostgreSQL dump follows"
-    echo -e "$PGBACKUP_LOG" | fold -w70 -s | sed '2~1s/^/  /' >&3
-  fi
-  #Move and rename Database dump file
-  if [[ $PGBACKUP_STATUS -eq 0 ]]; then
-  # Switch to PGBACKUP_DIR && rename the atldbbackup.sql.inprogress file to atldbbackup.sql
-  # Compression will be handled when creating the Borg backup file
-  # This will also be wrapped in the $((command) 2>&1 1>&3) syntax to capture any errors during this process.
-    PGBACKUPMV_LOG="$( { cd "$PGBACKUP_DIR" && mv -v atldbbackup.sql.inprogress atldbbackup.sql; } 2>&1)"
-    PGBACKUPMV_STATUS=$?
-    if [[ $PGBACKUPMV_STATUS -eq 0 ]]; then
-      notify "PostgreSQL Backup file creation has completed successfully."
-      echo -e "$PGBACKUPMV_LOG" | fold -w70 -s | sed '2~1s/^/  /' >&3
-    else
-      critical "" "PostgreSQL Database dump has completed but creation of the backup file has failed. Log follows"
-      echo -e "$PGBACKUPMV_LOG" | fold -w70 -s | sed '2~1s/^/  /' >&3
+    #Move and rename Database dump file
+    if [[ $PGBACKUP_STATUS -eq 0 ]]; then
+    # Switch to PGBACKUP_DIR && rename the atldbbackup.sql.inprogress file to atldbbackup.sql
+    # Compression will be handled when creating the Borg backup file
+    # This will also be wrapped in the $((command) 2>&1 1>&3) syntax to capture any errors during this process.
+      PGBACKUPMV_LOG="$( { cd "$PGBACKUP_DIR" && mv -v atldbbackup.sql.inprogress atldbbackup.sql; } 2>&1 1>&3)"
+      PGBACKUPMV_STATUS=$?
+      if [[ $PGBACKUPMV_STATUS -eq 0 ]]; then
+        notify "PostgreSQL Backup file creation has completed successfully. Verbose log output follows"
+        echo -e "$PGBACKUPMV_LOG" | fold -w70 -s | sed '2~1s/^/  /' >&3
+      else
+        critical "" "PostgreSQL Database dump has completed but creation of the backup file has failed. Log follows"
+        echo -e "$PGBACKUPMV_LOG" | fold -w70 -s | sed '2~1s/^/  /' >&3
+      fi
     fi
   fi
+
+    # If verbosity is set warning or lower then all programs called by the backup script will run in default mode and command output is not captured.
+  if [[ $verbosity -le "$wrn_lvl" ]]; then #i.e. -q or qq
+    #Dump all PostgreSQL databases
+    PGBACKUP_START="$(date +%s)"
+    pg_dumpall --host="$PGHOSTNAME" --port="$PGHOSTPORT" --clean -w > $PGBACKUP_DIR/atldbbackup.sql.inprogress
+    PGBACKUP_STATUS=$?
+    PGBACKUP_DONE="$(($(date +%s)-PGBACKUP_START))"
+    calc_elapsed_time "$PGBACKUP_DONE"
+      if [[ $PGBACKUP_STATUS -eq 0 ]]; then
+        notify "PostgreSQL Backup file creation has completed successfully. Time taken was $elapsedtime."
+      else
+        critical "" "PostgreSQL Database dump has failed. Time taken was $elapsedtime. Please re-run the script in verbose mode to turn on error messages"
+      fi
+
+    #Move and rename Database dump file
+    if [[ $PGBACKUP_STATUS -eq 0 ]]; then
+    # Switch to PGBACKUP_DIR && rename the atldbbackup.sql.inprogress file to atldbbackup.sql
+    # Compression will be handled when creating the Borg backup file
+    # This will also be wrapped in the $((command) 2>&1 1>&3) syntax to capture any errors during this process.
+      cd "$PGBACKUP_DIR" && mv -v atldbbackup.sql.inprogress atldbbackup.sql
+      PGBACKUPMV_STATUS=$?
+        if [[ $PGBACKUPMV_STATUS -eq 0 ]]; then
+          notify "PostgreSQL Backup file creation has completed successfully."
+        else
+          critical "" "PostgreSQL Database dump has completed but creation of the backup file has failed. Please re-run the script in verbose mode to turn on error messages"
+        fi
+    fi
+  fi
+}
 
   # Check if borg archive exists else create it for the first time
   # There can be multiple index files, but by checking for the existence of a "index.1" file guarantees that the archive exists
   # Checking for a hardcoded filename is not ideal, but this avoids having to add a for-do-done loop on top of an if-else loop
   #if [[ ! -e "$BORGBACKUP_DIR/$BORGTIP/index.1" ]]; then
   #  inf "The specific archive does not exist. Going to create it for the first time"
-  #  # Borg requires an encryption password by default. 
+  #  # Borg requires an encryption password by default.
   #  # Script defaults to "repokey" mode, where the password will be stored in the backup repository
   #  inf "You will be prompted to input the encryption password for the repository. DO NOT LOSE the password and back up the repository config file!"
   #  inf "If you did not execute the script as N | ./script for the first time running it, press enter one more time after entering the repository password"
@@ -199,9 +250,6 @@ if [[ $verbosity -gt "$wrn_lvl" ]]; then #i.e. -vv
   #Prune old backups
   #Unmount S3 mount
 
-fi
-
-
-
+main
 exit
 
