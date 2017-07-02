@@ -169,7 +169,7 @@ dump_database () {
     #Dump all PostgreSQL databases
     PGBACKUP_START="$(date +%s)"
     PGBACKUP_LOG="$( { pg_dumpall --host="$PGHOSTNAME" --port="$PGHOSTPORT" \
-                    --verbose --clean -w > $PGBACKUP_DIR/atldbbackup.sql.inprogress; } 2>&1 1>&3)"
+                    --verbose --clean -w > $PGBACKUP_DIR/atldbbackup.sql.inprogress; } 2>&1 1>&3 )"
     PGBACKUP_STATUS=$?
     PGBACKUP_DONE="$(($(date +%s)-PGBACKUP_START))"
     calc_elapsed_time "$PGBACKUP_DONE"
@@ -186,7 +186,7 @@ dump_database () {
     # Switch to PGBACKUP_DIR && rename the atldbbackup.sql.inprogress file to atldbbackup.sql
     # Compression will be handled when creating the Borg backup file
     # This will also be wrapped in the $((command) 2>&1 1>&3) syntax to capture any errors during this process.
-      PGBACKUPMV_LOG="$( { cd "$PGBACKUP_DIR" && mv -v atldbbackup.sql.inprogress atldbbackup.sql; } 2>&1 1>&3)"
+      PGBACKUPMV_LOG="$( { cd "$PGBACKUP_DIR" && mv -v atldbbackup.sql.inprogress atldbbackup.sql 2>&1; } )"
       PGBACKUPMV_STATUS=$?
       if [[ $PGBACKUPMV_STATUS -eq 0 ]]; then
         notify "PostgreSQL Backup file creation has completed successfully. Verbose log output follows"
