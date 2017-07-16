@@ -21,6 +21,8 @@ set -o pipefail
 
 
 #User-defined Script Variables
+PGPASSFILE="" #will default to ~/.pgpass if empty
+S3QLAUTHFILE="" #will default to ~/.s3ql/authinfo2 if empty
 PGBACKUP_DIR=/var/backups/postgresql
 PGBACKUPS_TO_KEEP=30
 BORGBACKUP_DIR=/var/backups/borg
@@ -133,14 +135,15 @@ check_dependencies () {
   # Find Home Directory. All required auth files are relative to this directory.
   USER_HOME="$(getent passwd "$USER" | cut -d: -f6)"
   # Check if required files exist
-  if [[ ! -f "$USER_HOME/.pgpass" ]]; then { critical "" "PostgreSQL configuration file is not available in default location of $USER_HOME/.pgpass. Aborting."; exit 1; } else :; fi
+  if [[ ! -f "${PGPASSFILE:-$USER_HOME/.pgpass}" ]]; then { critical "" "PostgreSQL configuration file is not available. Aborting."; exit 1; } else :; fi
+  if [[ ! -f "${S3QLAUTHFILE:-$USER_HOME/.s3ql/authinfo2}" ]]; then { critical "" "S3QL Authorization file is not available. Aborting."; exit 1; } else :; fi
   # TODO: Add check for S3QL/authinfo2
 
   # Check if required executables exist in user's $PATH
   hash pg_dumpall 2>/dev/null || { critical "" "Script requires pg_dumpall but it is not available in $USER's PATH. Aborting."; exit 1; }
   hash borg 2>/dev/null || { critical "" "Script requires borg but it is not available in $USER's PATH. Aborting."; exit 1; }
   #hash mount.s3ql 2>/dev/null || { critical "" "Script requires S3QL tools but they are not available in $USER's PATH. Aborting."; exit 1; }
-  hash rsync 2>/dev/null || { critical "" "Script requires rsync but it is not available in $USER's PATH. Aborting."; exit 1; }
+
 }
 
 check_dirs () {
@@ -228,6 +231,12 @@ dump_database () {
   fi
 }
 
+#mount_s3 () {
+  # S3QL requires the S3 Bucket to S3QL formatted before it can work with it. Since the mfks.s3ql command will re-prompt for the encryption
+  # password on creation, the filesystem creation cannot be automated. There is also no "info" command available to gracefull check for the presence of a
+  # S3QL filesystem. The best remaining option therefore is to try to run fsck and parse the error codes. "18" indicates the lack of a S3QL filesystem
+  # Any other error code from this step will be simply redirected to the error log.
+#}
   # Check if borg archive exists else create it for the first time
   # There can be multiple index files, but by checking for the existence of a "index.1" file guarantees that the archive exists
   # Checking for a hardcoded filename is not ideal, but this avoids having to add a for-do-done loop on top of an if-else loop
