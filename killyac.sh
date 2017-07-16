@@ -17,8 +17,7 @@ DISPID="5"
 
 # Kill running YACReader Library sessions
 echo "Killing any running sessions of YACReader Library"
-# This will kill all Xvfb sessions for the defined user, so if you have other Xvfb sessions you need active
-# Consider running YACReader Library under a different user that will not clash
-pgrep -u "$USER" Xvfb | xargs kill -- #This one-liner has the added benefit of terminating VNC, the WM & YACReader as well. Nice!
+#This one-liner will terminate the entire process tree for a running instance of the Calibre Library. Nice!
+ps -o pgid,cmd -U "$USER" | awk -v disp="[X]vfb :$DISPID" '$0 ~ disp { print $1 }' | xargs pkill -TERM -g
 
 #set +x #Turn debugging off

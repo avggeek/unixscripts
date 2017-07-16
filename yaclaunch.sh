@@ -48,12 +48,6 @@ VNCEXEC="$(command -v x11vnc)" && command -v x11vnc >/dev/null 2>&1 || { echo >&
 WMEXEC="$(command -v "$WMGR")" && command -v "$WMGR" >/dev/null 2>&1 || { echo >&2 "The Window Manager specified does not appear to be a valid choice. Aborting." | tee -a "$LOGIFLE"; unset WMEXEC; unset WMGR; exit 1; }
 YACEXEC="$(command -v YACReaderLibrary)" && command -v YACReaderLibrary >/dev/null 2>&1 || { echo >&2 "The script requires YACReader Library but it's not installed. Aborting." | tee -a "$LOGIFLE"; unset YACEXEC; exit 1; }
 
-# Even though is a script to launch YACReader Library, we will exit any running instances first
-echo "Killing any running sessions of YACReader Library" | tee -a "$LOGIFLE"
-# This will kill all Xvfb sessions for the defined user, so if you have other Xvfb sessions you need active
-# Consider running YACReader Library under a different user that will not clash
-pgrep -u "$USER" Xvfb | xargs kill -- #This one-liner has the added benefit of terminating VNC, the WM & YACReader as well. Nice!
-
 #Setup the Framebuffer display and Window Manager
 echo "Starting the display" | tee -a "$LOGIFLE"
 #The RANDR extension was added so that VNC stops complaining.
@@ -79,7 +73,7 @@ echo "Starting VNC" | tee -a "$LOGIFLE"
 # If you do want to set a password, first run x11vnc -storepasswd which will create ~/.vnc/passwd
 # Then change -nopw to -usepw
 # If you need additional logging, you can replace -quiet with -logfile /path/to/vncerr.log
-"$VNCEXEC" -display :"$DISPID" -rfbport "$DISPPORT" -noipv6 -noxdamage -ncache_cr -nolookup --nopw --allow "$IPRANGE" -quiet -nocursor -noclipboard -bg --forever
+"$VNCEXEC" -display :"$DISPID" -rfbport "$DISPPORT" -noipv6 -noxdamage -ncache_cr -nolookup --nopw --allow "$IPRANGE" -quiet -noclipboard -bg --forever >/dev/null 2>&1
 
 #Launch YACReader Library and maximize it
 echo "Starting YACReader Library" | tee -a "$LOGIFLE"
