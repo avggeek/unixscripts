@@ -5,8 +5,8 @@
 # and https://gist.github.com/cm6051/a7a67c30b2ef3f52f8c5. Shout-out to the many SO commenters who provided working
 # Bash examples for me to learn from.
 
-# Dependencies:  S3QL, Borgbackup, rysnc, presence of ~/.s3ql/authinfo2 and ~/.pgpass files under user running the job.
-#                Password files should be set have file permissions set to 0400 for safety
+# Dependencies:  S3QL, Borgbackup, presence of ~/.s3ql/authinfo2 and ~/.pgpass files under user running the job.
+#                Password files should be set have file permissions set to 0600 for safety
 
 #Good habits
 #set -o errexit
@@ -231,12 +231,13 @@ dump_database () {
   fi
 }
 
-#mount_s3 () {
+mount_s3 () {
   # S3QL requires the S3 Bucket to S3QL formatted before it can work with it. Since the mfks.s3ql command will re-prompt for the encryption
-  # password on creation, the filesystem creation cannot be automated. There is also no "info" command available to gracefull check for the presence of a
+  # password on creation, the filesystem creation cannot be automated. There is also no "info" command available to gracefully check for the presence of a
   # S3QL filesystem. The best remaining option therefore is to try to run fsck and parse the error codes. "18" indicates the lack of a S3QL filesystem
   # Any other error code from this step will be simply redirected to the error log.
-#}
+
+}
   # Check if borg archive exists else create it for the first time
   # There can be multiple index files, but by checking for the existence of a "index.1" file guarantees that the archive exists
   # Checking for a hardcoded filename is not ideal, but this avoids having to add a for-do-done loop on top of an if-else loop
