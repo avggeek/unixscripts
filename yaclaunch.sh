@@ -53,15 +53,15 @@ echo "Starting the display" | tee -a "$LOGIFLE"
 #The RANDR extension was added so that VNC stops complaining.
 "$XVFBEXEC" :"$DISPID" -screen 0 "$DISPRES" -ac +extension RANDR &>/dev/null & #We are specifying Bash for the interpreter, so no POSIX Compliance here!
 	echo "Waiting for 10 seconds to allow Xvfb to initalize" | tee -a "$LOGIFLE"
-	sleep 2
+	sleep 1
 	/bin/echo -ne '####                    (20%)\r'
-	sleep 2
+	sleep 1
 	/bin/echo -ne '########                (40%)\r'
-	sleep 2
+	sleep 1
 	/bin/echo -ne '############            (60%)\r'
-	sleep 2
+	sleep 1
 	/bin/echo -ne '################        (80%)\r'
-	sleep 2
+	sleep 1
 	/bin/echo -ne '####################    (100%)\r'
 	/bin/echo -ne '\n'
 DISPLAY=:"$DISPID" "$WMEXEC" &>/dev/null &
@@ -80,6 +80,6 @@ echo "Starting YACReader Library" | tee -a "$LOGIFLE"
 DISPLAY=:"$DISPID" "$YACEXEC" &>/dev/null &
 	echo "Waiting for 2 seconds to allow YAC Reader Library to load" | tee -a "$LOGIFLE"
 	sleep 2
-DISPLAY=:"$DISPID" "$WMCTRLEXEC" -r "$YACWINNAME" -b add,fullscreen
+DISPLAY=:"$DISPID" "$WMCTRLEXEC" -r "$YACWINNAME" -b add,maximized_vert,maximized_horz
 
 #set +x #Turn debugging off
