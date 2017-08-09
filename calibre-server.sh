@@ -78,8 +78,7 @@ echo "Starting VNC" | tee -a "$LOGIFLE"
 #Launch Calibre Library and maximize it
 echo "Starting Calibre Library" | tee -a "$LOGIFLE"
 DISPLAY=:"$DISPID" "$CALEXEC" &>/dev/null &
-	echo "Waiting for 2 seconds to allow the Calibre Library to load" | tee -a "$LOGIFLE"
-	sleep 2
-DISPLAY=:"$DISPID" "$WMCTRLEXEC" -r "$CALWINNAME" -b add,fullscreen
-
+echo "Waiting for 5 seconds to allow the Calibre Library to load" | tee -a "$LOGIFLE"
+sleep 5
+DISPLAY=:"$DISPID" "$WMCTRLEXEC" -r "$CALWINNAME" -b add,maximized_vert,maximized_horz
 #set +x #Turn debugging off
