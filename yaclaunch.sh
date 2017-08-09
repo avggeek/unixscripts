@@ -51,8 +51,8 @@ YACEXEC="$(command -v YACReaderLibrary)" && command -v YACReaderLibrary >/dev/nu
 #Setup the Framebuffer display and Window Manager
 echo "Starting the display" | tee -a "$LOGIFLE"
 #The RANDR extension was added so that VNC stops complaining.
-"$XVFBEXEC" :"$DISPID" -screen 0 "$DISPRES" -ac +extension RANDR &>/dev/null & #We are specifying Bash for the interpreter, so no POSIX Compliance here!
-	echo "Waiting for 10 seconds to allow Xvfb to initalize" | tee -a "$LOGIFLE"
+"$XVFBEXEC" :"$DISPID" -screen 0 "$DISPRES" -ac +extension GLX +extension RANDR &>/dev/null & #We are specifying Bash for the interpreter, so no POSIX Compliance here!
+echo "Waiting for 5 seconds to allow Xvfb to initalize" | tee -a "$LOGIFLE"
 	sleep 1
 	/bin/echo -ne '####                    (20%)\r'
 	sleep 1
@@ -78,8 +78,8 @@ echo "Starting VNC" | tee -a "$LOGIFLE"
 #Launch YACReader Library and maximize it
 echo "Starting YACReader Library" | tee -a "$LOGIFLE"
 DISPLAY=:"$DISPID" "$YACEXEC" &>/dev/null &
-	echo "Waiting for 2 seconds to allow YAC Reader Library to load" | tee -a "$LOGIFLE"
-	sleep 2
+echo "Waiting for 2 seconds to allow YAC Reader Library to load" | tee -a "$LOGIFLE"
+sleep 2
 DISPLAY=:"$DISPID" "$WMCTRLEXEC" -r "$YACWINNAME" -b add,maximized_vert,maximized_horz
 
 #set +x #Turn debugging off
