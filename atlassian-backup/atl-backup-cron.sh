@@ -7,8 +7,8 @@
 BACKUPLOGDIR="$HOME/.cache"
 
 # Email Address to send mail to? (user@domain.com)
-MAILADDR="logmon@theaveragegeek.com"
-ERRMAILADDR="me@theaveragegeek.com"
+MAILADDR="contact@theaveragegeek.com"
+ERRMAILADDR="contact@theaveragegeek.com"
 
 # Location of backup script
 SCRIPTPATH=$HOME/bin/atl-backup.sh
