@@ -2,15 +2,6 @@
 
 This script was developed to create a full backup (database and application folders) of various Atlassian products. Whether it's Confluence, Jira or any other product, Atlassian _[repeatedly](https://confluence.atlassian.com/doc/site-backup-and-restore-163578.html)_ _[recommends](https://confluence.atlassian.com/adminjiraserver071/backing-up-data-802592964.html)_ not relying on the XML backups created by their products and instead suggest rolling your own. Well, this is my version of "rolling your own" backup.
 
-### Table of Contents
-   - #### [Features](#features)
-   - #### [Installation](#getscripts)
-   - #### [Dependencies](#dependencies)
-   - #### [Caveats](#caveats)
-   - #### [Scheduling](#scheduling)
-   - #### [To-Do](#todo)
- 
-
 #### [Features](features)
 - Backup databases and application folders to an online remote storage service. Supported services include Google Storage, Amazon S3, Openstack etc.
 - Backups are stored in an encrypted filesystem at rest and the backups themselves are encrypted.
