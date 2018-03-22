@@ -26,9 +26,9 @@ BORGPASSFILE="" #will default to $BORG_CONFIG_DIR/pass/$BORGTIP if empty
 #BORGBACKUP_DIR="/var/backups/borg"
 BORGBACKUP_DIR="$S3QLMNT/borg"
 BORGTIP=atlbackup
-BORGBACKUP_SRC="/var/atlassian/application-data"
+BORGBACKUP_SRC="/var/atlassian/application-data /opt/bitbucket"
 # Enter a series of comma-separated folder paths. Paths can have spaces in them.
-BORGEXCLUDE_DIR="/var/atlassian/application-data/*/log/*,/var/atlassian/application-data/*/export/*,/var/atlassian/application-data/*/analytics-logs/*"
+BORGEXCLUDE_DIR="/var/atlassian/application-data/stash/*,/var/atlassian/application-data/*/log/*,/var/atlassian/application-data/*/export/*,/var/atlassian/application-data/*/analytics-logs/*,/opt/atlassian/*/logs/*"
 # Keep 30 end of day, 4 additional end of week archives, and an end of month archive for every month:
 BORGBACKUPS_TO_KEEP="--keep-daily=30"
 
@@ -39,7 +39,7 @@ set -o nounset
 set -o noglob
 set -o pipefail
 # Dev habits
-#set -o xtrace
+set -o xtrace
 #set -o nounset
 #set -o noglob
 #set -o pipefail
@@ -333,8 +333,9 @@ cannot be found in $USER's PATH. Aborting."; exit 1; }
 $USER's PATH. Aborting."; exit 1; }
 
   # Check if target directories for Borg to backup exist
-  for dir in $BORGBACKUP_SRC; do if [[ ! -d "$dir" ]]; then { critical "" "Target directory(ies) for \
-Borg to backup $dir is(are) missing" ; exit 1; } fi; done
+  # Commenting this out for now since it does not support multiple backup targets
+  #for dir in $BORGBACKUP_SRC; do if [[ ! -d "$dir" ]]; then { critical "" "Target directory(ies) for \
+#Borg to backup $dir is(are) missing" ; exit 1; } fi; done
 
 )
 
@@ -609,7 +610,7 @@ borg_backup () {
   # STDOUT & STDERR. Hence, falling back to capturing in a file and then loading the
   # file to a variable.
   { export BORG_PASSPHRASE="$BORGPASS"; borg create --debug --compression auto,lzma\
-   $EXCLUDEDIR "$BORGBACKUP_DIR/$BORGTIP::$BORGTIP-$(date +%s)" "$BORGBACKUP_SRC" &> /tmp/borgbk-$(date +%Y%m%d).log; } #
+   $EXCLUDEDIR "$BORGBACKUP_DIR/$BORGTIP::$BORGTIP-$(date +%s)" $BORGBACKUP_SRC &> /tmp/borgbk-$(date +%Y%m%d).log; } #
   local BORGBK_STATUS=$?
   local BORGBACKUP_LOG="$(</tmp/borgbk-$(date +%Y%m%d).log)" && rm /tmp/borgbk-$(date +%Y%m%d).log
   local BORGBACKUP_DONE="$(($(date +%s)-$BORGBACKUP_START))"
