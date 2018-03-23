@@ -4,7 +4,7 @@
 # Mostly taken from /usr/share/doc/s3ql/examples/s3ql_backup.sh, https://wiki.postgresql.org/wiki/Automated_Backup_on_Linux
 # and https://gist.github.com/cm6051/a7a67c30b2ef3f52f8c5. Shout-out to the many SO commenters who provided working
 # Bash examples for me to learn from.
-# VER=0.12                                                 # (Release name "aka Good Enough")
+# VER=0.13                                                 # (Release name "aka Good Enough")
 
 # Dependencies:  S3QL, Borgbackup, presence of ~/.s3ql/authinfo2 and ~/.pgpass files under user running the job.
 #                Borg backup archives are assumed to be created in repokey (password) mode.
@@ -26,7 +26,7 @@ BORGPASSFILE="" #will default to $BORG_CONFIG_DIR/pass/$BORGTIP if empty
 #BORGBACKUP_DIR="/var/backups/borg"
 BORGBACKUP_DIR="$S3QLMNT/borg"
 BORGTIP=atlbackup
-BORGBACKUP_SRC="/var/atlassian/application-data /opt/bitbucket"
+BORGBACKUP_SRC="/var/atlassian/application-data /opt/atlassian/bitbucket"
 # Enter a series of comma-separated folder paths. Paths can have spaces in them.
 BORGEXCLUDE_DIR="/var/atlassian/application-data/stash/*,/var/atlassian/application-data/*/log/*,/var/atlassian/application-data/*/export/*,/var/atlassian/application-data/*/analytics-logs/*,/opt/atlassian/*/logs/*"
 # Keep 30 end of day, 4 additional end of week archives, and an end of month archive for every month:
@@ -39,7 +39,7 @@ set -o nounset
 set -o noglob
 set -o pipefail
 # Dev habits
-set -o xtrace
+#set -o xtrace
 #set -o nounset
 #set -o noglob
 #set -o pipefail
